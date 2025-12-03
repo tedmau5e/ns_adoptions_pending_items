@@ -4,44 +4,123 @@ import pandas as pd
 from datetime import datetime
 import os
 import threading
-import sys
+from dotenv import load_dotenv
+import requests as req
+from requests.exceptions import HTTPError
+from PIL import Image
+import shutil
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+load_dotenv(dotenv_path="./ISBNdb_API_Key.env")
+api_key = os.getenv("API_KEY")
+print(api_key)
 
 cols_to_delete = ['ID', 'School', 'Academic Department Code', 'Section Code', 'Section Name', 'Class Number', 'Class Section', 'Estimated Enrollment', 'Book Cover Type', 'Course Material Requirement', 'Item', 'Item Notes', 'Previously Adopted', 'OK to Substitute', 'Internal Notes', 'Item Type', 'Adoption Status Date', 'Item Buyer Statistic']
 
+NS = {'ss': 'urn:schemas-microsoft-com:office:spreadsheet'}
 current_date = datetime.now()
 date_string = current_date.strftime("%m%d%y")
 
+home_directory = os.path.expanduser('~')
+desktop_path = os.path.join(home_directory, 'Desktop')
+dl_folder_name = f'book_covers-{date_string}'
+dl_folder_home = os.path.join(desktop_path, dl_folder_name)
+resized_images = f'{date_string}-resized_images'
+
 def load_file(root):
-    file_path = filedialog.askopenfilename(
-        title="Select input file",
-        filetypes=[("Excel files", "*.xlsx, *.xls"), ("CSV files", "*.csv")]
-    )
-    if not file_path:
-        messagebox.showerror("Error", "No file selected. Exiting")
+    file_path = None
+    while file_path is None:
+        file_path = filedialog.askopenfilename(
+            title="Select input file",
+            filetypes=[("Excel files", "*.xlsx *.xls"), ("CSV files", "*.csv")]
+        )
+        if not file_path:
+            retry_dialog_result = messagebox.askretrycancel("No file selected", "Please select a file to proceed.")
+            if retry_dialog_result:
+                continue
+            else:
+                return None
     
-    try:
-        if file_path.endswith('.xlsx'):
-            df = pd.read_excel(file_path, header=0)
-            messagebox.showinfo("Success", "Successfully loaded Excel file.")
-            return df
-        elif file_path.endswith('.xls'):
-            try:
-                df = pd.read_xls(file_path, header=0)
+        try:
+            if file_path.endswith('.xlsx'):
+                df = pd.read_excel(file_path, header=0)
                 messagebox.showinfo("Success", "Successfully loaded Excel file.")
                 return df
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to load. Please try opening the file and saving as .xls or .xlsx, then run this script again.")
-                return None
-        elif file_path.endswith('.csv'):
-            df = pd.read_csv(file_path, header=0)
-            df['ISBN'] = pd.to_numeric(df['ISBN'], errors="coerce")
-            messagebox.showinfo("Success", "Successfully loaded CSV file.")
-            return df
-        else:
-            messagebox.showerror("Error", "Unsupported file format. Please provide a valid Excel file (.xlsx).")
-    except Exception as e:
-        messagebox.showerror("Error", f"Error loading file: {e}")
-        return None
+            elif file_path.endswith('.xls'):
+                try:
+                    df = pd.read_excel(file_path, header=0, engine='xlrd')
+                    messagebox.showinfo("Success", "Successfully loaded Excel file.")
+                    return df
+                except Exception as e:
+                    conversion_attempt_box = messagebox.askquestion("Error", f"Failed to load. Attempt converting to .xlsx?")
+                    if conversion_attempt_box == 'yes':
+                        try:
+                            df = parse_xml_data_to_df(file_path)
+                            messagebox.showinfo("Success", "Successfully loaded file.")
+                            return df
+                        except Exception as e:
+                            retry_dialog_result = messagebox.askretrycancel("Error", f"An error occurred while reading the file: {e}. Try again?")
+                            if not retry_dialog_result:
+                                break
+                            file_path = None
+                    else:
+                        break
+            elif file_path.endswith('.csv'):
+                df = pd.read_csv(file_path, header=0)
+                messagebox.showinfo("Success", "Successfully loaded CSV file.")
+                return df
+            else:
+                retry_dialog_result = messagebox.askretrycancel("Error", "Unsupported file format. Please provide a valid Excel (.xlsx or .xls) or CSV (.csv) file.")
+                if not retry_dialog_result:
+                    break
+                file_path = None
+        except FileNotFoundError:
+            retry_dialog_result = messagebox.askretrycancel("Error", f"File not found: {file_path}. Select a different file?")
+            if not retry_dialog_result:
+                break
+            file_path = None
+        except Exception as e:
+            retry_dialog_result = messagebox.askretrycancel("Error", f"An error occurred while reading the file: {e}. Try again?")
+            if not retry_dialog_result:
+                break
+            file_path = None
+    return None
+
+def parse_xml_data_to_df(file_path):
+    tree = ET.parse(file_path)
+    root = tree.getroot()
+    
+    data = []
+    columns = []
+
+    table = root.find('.//ss:Table', NS)
+
+    if table is None:
+        raise ValueError("could not find 'Table' element in sheet.")
+    
+    header_row = table.find('ss:Row', NS)
+    if header_row is not None:
+        for cell in header_row.findall('ss:Cell', NS):
+            data_element = cell.find('ss:Data', NS)
+            if data_element is not None:
+                columns.append(data_element.text)
+    
+    for row in table.findall('ss:Row', NS)[1:]:
+        row_data = []
+        for cell in row.findall('ss:Cell', NS):
+            data_element = cell.find('ss:Data', NS)
+            if data_element is not None:
+                row_data.append(data_element.text)
+            else:
+                row_data.append(None)
+        data.append(row_data)
+    
+    df = pd.DataFrame(data, columns=columns, index=None)
+    excel_file_name = Path(file_path).stem + ".xlsx"
+    df.to_excel(excel_file_name, index=False)
+    print(df)
+    return df
 
 def delete_junk_cols(df):
     # function to delete unneeded columns
@@ -67,7 +146,7 @@ def rename_and_add_cols(df):
     print(current_cols)
     df1.rename(columns={'Item Display Name': 'DISPLAYNAME', 'ISBN' : 'ISBN', 'UPC Code' : 'UPC', 'Long Title' : 'LONG_TITLE', 'Short Title' : 'SHORT_TITLE', 'Book Author' : 'AUTHOR', 'Book Publisher' : 'IMPRINT'}, inplace=True)
     df1['DISPLAYNAME'] = df1['DISPLAYNAME'].fillna(df1['LONG_TITLE'])
-    new_columns = {'EXTERNAL_ID' : '', 'ITEM_NAME_NUMBER' : '', 'MATRIX_TYPE' : 'Parent Matrix Item', 'CS_PRODUCT_TYPE' : '', 'PARENT' : '', 'UNIT_TYPE' : 'Each', 'STOCK_UNIT' : 'EA', 'PURCHASE_UNIT' : 'EA', 'SALE_UNIT' : 'EA', 'DO_NOT_ALLOW_DISCOUNT' : 'T', 'SUBSIDIARY' : 'Brown University Bookstore', 'INCLUDE_CHILDREN' : 'T', 'DEPARTMENT' : 'Textbooks : TX Textbook (TXT)', 'PRODUCT_CATEGORY' : 'Course Materials Physical (CMP) : Print New', 'RENTAL_AVAILABLE' : '', 'BOOK_CONDITION' : '', 'EDITION' : 'NA', 'WEB_DISP_BEHAVIOR' : 'ATP based add and remove from web display', 'COSTING_METHOD' : 'Average', 'PREFERRED_LOCATION' : 'Main Campus Bookstore', 'COGS_ACCOUNT' : '219', 'INCOME_ACCOUNT' : '324', 'ASSET_ACCOUNT' : '218', 'TAX_SCHEDULE' : 'Taxable RI'}
+    new_columns = {'EXTERNAL_ID' : '', 'ITEM_NAME_NUMBER' : '', 'MATRIX_TYPE' : 'Parent Matrix Item', 'CS_PRODUCT_TYPE' : '', 'PARENT' : '', 'UNIT_TYPE' : 'Each', 'STOCK_UNIT' : 'EA', 'PURCHASE_UNIT' : 'EA', 'SALE_UNIT' : 'EA', 'DO_NOT_ALLOW_DISCOUNT' : 'T', 'SUBSIDIARY' : 'Brown University Bookstore', 'INCLUDE_CHILDREN' : 'T', 'DEPARTMENT' : 'Textbooks : TX Textbook (TXT)', 'PRODUCT_CATEGORY' : 'Course Materials Physical (CMP) : Print New', 'RENTAL_AVAILABLE' : '', 'BOOK_CONDITION' : '', 'EDITION' : 'NA', 'WEB_DISP_BEHAVIOR' : 'ATP based add and remove from web display', 'COSTING_METHOD' : 'Average', 'PREFERRED_LOCATION' : 'Main Campus Bookstore', 'COGS_ACCOUNT' : '219', 'INCOME_ACCOUNT' : '324', 'ASSET_ACCOUNT' : '218', 'TAX_SCHEDULE' : 'Taxable RI', 'Webstore Image Name': ''}
     for index in range(first_row_idx, last_row_idx):
         for col, val in new_columns.items():
             df2.loc[index, col] = val
@@ -79,7 +158,7 @@ def reorder_all_cols(df):
     # function to settle final column order
     current_cols = df.columns.tolist()
     print(current_cols)
-    final_col_order = ['EXTERNAL_ID', 'ITEM_NAME_NUMBER', 'DISPLAYNAME', 'MATRIX_TYPE', 'CS_PRODUCT_TYPE', 'PARENT', 'ISBN', 'UPC', 'UNIT_TYPE', 'STOCK_UNIT', 'PURCHASE_UNIT', 'SALE_UNIT', 'DO_NOT_ALLOW_DISCOUNT', 'SUBSIDIARY', 'INCLUDE_CHILDREN', 'DEPARTMENT', 'PRODUCT_CATEGORY', 'RENTAL_AVAILABLE', 'BOOK_CONDITION', 'LONG_TITLE', 'SHORT_TITLE', 'AUTHOR', 'EDITION', 'IMPRINT', 'WEB_DISP_BEHAVIOR', 'COSTING_METHOD', 'PREFERRED_LOCATION', 'COGS_ACCOUNT', 'INCOME_ACCOUNT', 'ASSET_ACCOUNT', 'TAX_SCHEDULE']
+    final_col_order = ['EXTERNAL_ID', 'ITEM_NAME_NUMBER', 'DISPLAYNAME', 'MATRIX_TYPE', 'CS_PRODUCT_TYPE', 'PARENT', 'ISBN', 'UPC', 'UNIT_TYPE', 'STOCK_UNIT', 'PURCHASE_UNIT', 'SALE_UNIT', 'DO_NOT_ALLOW_DISCOUNT', 'SUBSIDIARY', 'INCLUDE_CHILDREN', 'DEPARTMENT', 'PRODUCT_CATEGORY', 'RENTAL_AVAILABLE', 'BOOK_CONDITION', 'LONG_TITLE', 'SHORT_TITLE', 'AUTHOR', 'EDITION', 'IMPRINT', 'WEB_DISP_BEHAVIOR', 'COSTING_METHOD', 'PREFERRED_LOCATION', 'COGS_ACCOUNT', 'INCOME_ACCOUNT', 'ASSET_ACCOUNT', 'TAX_SCHEDULE', 'Webstore Image Name']
     return df[final_col_order]
 
 def fill_easy_cells(df):
@@ -87,22 +166,25 @@ def fill_easy_cells(df):
     print(f"{df['EXTERNAL_ID']}")
     df['ITEM_NAME_NUMBER'] = df.apply(lambda row: f"{row['DISPLAYNAME']}-{row['ISBN']}", axis=1)
     print(f"{df['ITEM_NAME_NUMBER']}")
+    df['Webstore Image Name'] = df.apply(lambda row: f"{row['ISBN']}", axis=1)
+    print(f"{df['Webstore Image Name']}")
 
 def label_dupes(row):
     if row['occurrence'] == 1:
         row['EXTERNAL_ID'] = row['EXTERNAL_ID'].replace('parent', 'new')
         row['ITEM_NAME_NUMBER'] = row['ITEM_NAME_NUMBER'] + '-New'
-        row['MATRIX_TYPE'] = 'Child Matrix Type'
+        row['MATRIX_TYPE'] = 'Child Matrix Item'
         row['CS_PRODUCT_TYPE'] = 'New'
         row['PARENT'] = str(row['ISBN']) + 'parent'
         row['UPC'] = row['ISBN']
         row['INCLUDE_CHILDREN'] = 'F'
         row['RENTAL_AVAILABLE'] = 'F'
         row['BOOK_CONDITION'] = 'New'
+        row['Webstore Image Name'] = ''
     elif row['occurrence'] == 2:
         row['EXTERNAL_ID'] = row['EXTERNAL_ID'].replace('parent', 'used')
         row['ITEM_NAME_NUMBER'] = row['ITEM_NAME_NUMBER'] + '-Used'
-        row['MATRIX_TYPE'] = 'Child Matrix Type'
+        row['MATRIX_TYPE'] = 'Child Matrix Item'
         row['CS_PRODUCT_TYPE'] = 'Used'
         row['PARENT'] = str(row['ISBN']) + 'parent'
         row['UPC'] = str(row['ISBN']).replace('978', '290')
@@ -111,6 +193,7 @@ def label_dupes(row):
         row['RENTAL_AVAILABLE'] = 'F'
         row['BOOK_CONDITION'] = 'Used'
         row['TAX_SCHEDULE'] = 'Not Taxable'
+        row['Webstore Image Name'] = ''
     return row
 
 def make_children(df):
@@ -129,6 +212,87 @@ def make_children(df):
     df_duplicated = df_duplicated.drop(columns=['occurrence', 'original_index']) # remove 'occurrence' and 'original_index' columns
     return df_duplicated
 
+def get_images(isbn):
+    base_url = f'https://api2.isbndb.com/book/'
+    headers = {
+        'accept': 'application/json',
+        'Authorization': api_key
+    }
+    
+    os.makedirs(dl_folder_home, exist_ok=True)
+    book_cover = f'{isbn}.jpg'
+    images_save_path = os.path.join(dl_folder_home, book_cover)
+
+    try:
+        url = f'{base_url}{isbn}'
+        response = req.get(url, headers=headers, stream=True)
+        print(headers)
+        response.raise_for_status()
+        book_data = response.json()
+        if 'image_original' in book_data['book']:
+            image = book_data['book']['image_original']
+            image_link = req.get(image, stream=True)
+            image_link.raise_for_status()
+            with open(images_save_path, 'wb') as file:
+                for chunk in image_link.iter_content(chunk_size=8192):
+                    file.write(chunk)
+        elif 'image' not in book_data['image_original']:
+            messagebox.showerror('Error', f'No image found for {isbn}.')
+    except HTTPError as e:
+        print(f"HTTP Error occurred: {e}")
+        print(f"Status code: {e.response.status_code}")
+        if e.response.status_code == 404:
+            print(f"No result for ISBN {isbn}. Try at a later date to check if a record exists.")
+            messagebox.showerror('Error', f'No result for ISBN {isbn}. Try at a later date to check if a record exists.')
+            return
+        elif e.response.status_code == 429:
+            print(f"Daily requests limit met. Please try tomorrow.")
+            messagebox.showerror('Error', 'Daily requests limit met. Please try again tomorrow.')
+            return
+    except req.exceptions.RequestException as e:
+        messagebox.showerror("Error", f"API call failed for {isbn}: \n{e}")
+        return None
+
+def resize_covers(input_folder, output_folder, canvas_size):
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+    
+    for filename in os.listdir(input_folder):
+        if filename.lower().endswith(('.jpg', '.jpeg')):
+            input_path = os.path.join(input_folder, filename)
+            output_path = os.path.join(output_folder, filename)
+
+            try:
+                img = Image.open(input_path).convert("RGB")
+            except Exception as e:
+                print(f"Error processing {filename}: \n{e}")
+                return
+            
+            canvas_width, canvas_height = canvas_size
+            img_width, img_height = img.size
+
+            canvas = Image.new("RGB", canvas_size, (255, 255, 255))
+
+            if img_width > canvas_width or img_height > canvas_height:
+                ratio_w = canvas_width / img_width
+                ratio_h = canvas_height / img_height
+                scale_factor = min(ratio_w, ratio_h)
+
+                new_width = int(img_width * scale_factor)
+                new_height = int(img_height * scale_factor)
+                resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+                x_offset = (canvas_width - new_width) // 2
+                y_offset = (canvas_height - new_height) // 2
+                canvas.paste(resized_img, (x_offset, y_offset))
+            else:
+                x_offset = (canvas_width - img_width) // 2
+                y_offset = (canvas_width - img_height) // 2
+                canvas.paste(img, (x_offset, y_offset))
+            
+            canvas.save(output_path)
+            print(f"Processed {filename} saved to {output_path}")
+
 def loading_popup(root, task_functions, title="Working", message="Please wait..."):
     popup = tk.Toplevel(root)
     popup.title(title)
@@ -145,7 +309,7 @@ def loading_popup(root, task_functions, title="Working", message="Please wait...
     worker_thread = threading.Thread(target=task_wrapper, daemon=True)
     worker_thread.start()
 
-def change_books(load_file, delete_junk_cols, reorder_cols, rename_and_add_cols, reorder_all_cols, fill_easy_cells, make_children):
+def change_books(load_file, delete_junk_cols, reorder_cols, rename_and_add_cols, reorder_all_cols, fill_easy_cells, get_images, resize_covers, make_children):
     try:
         df = load_file(root)
         if df is None:
@@ -157,7 +321,7 @@ def change_books(load_file, delete_junk_cols, reorder_cols, rename_and_add_cols,
         try:
             df = df[new_column_order]
         except KeyError as e:
-            messagebox.showerror("Error", f"Error reordering columns: {e}")
+            messagebox.showerror("Error", f"Error reordering columns: \n{e}")
             return
         
         df = rename_and_add_cols(df)
@@ -166,31 +330,53 @@ def change_books(load_file, delete_junk_cols, reorder_cols, rename_and_add_cols,
         
         fill_easy_cells(df)
         print(df)
+        
+        for index, row in df.iterrows():
+            isbn = row['ISBN']
+            get_images(isbn)
+        
+        resize_covers(dl_folder_home, resized_images, (600, 600))
+
         df = make_children(df)
         print(df)
 
-        save_directory = filedialog.askdirectory(parent=root, title="Select Save Location")
-        default_name = f'Adptd_Text_Items-{date_string}.xlsx'
-        full_save_path = os.path.join(save_directory, default_name)
+        try:
+            shutil.rmtree(dl_folder_home)
+            print(f"\nSuccessfully deleted original image folder {dl_folder_home}.")
+        except OSError as e:
+            print(f"\nError deleting folder: {dl_folder_home}: \n{e}")
+    
+        archive_name = f'{resized_images}-compressed'
+        archive_format = 'zip'
+        root_dir = resized_images
+        shutil.make_archive(archive_name, archive_format, root_dir)
+        messagebox.showinfo("Compressed", "Image folder compressed for upload.")
 
-        with pd.ExcelWriter(full_save_path, engine='openpyxl') as writer:
-            df.to_excel(writer, sheet_name=default_name, index=False)
+        save_directory = filedialog.askdirectory(parent=root, title="Select Save Location")
+        excel_name = f'Adptd_Text_Items-{date_string}.xlsx'
+        csv_name = f'Adptd_Text_Items-{date_string}.csv'
+        excel_save_path = os.path.join(save_directory, excel_name)
+        csv_save_path = os.path.join(save_directory, csv_name)
+
+        with pd.ExcelWriter(excel_save_path, engine='openpyxl') as writer:
+            df.to_excel(writer, sheet_name=excel_name, index=False)
             format_cols = ['ISBN', 'UPC']
             for col_name in format_cols:
                 col_idx = df.columns.get_loc(col_name) + 1
-                for row in writer.sheets[default_name].iter_rows(min_col=col_idx, max_col=col_idx):
+                for row in writer.sheets[excel_name].iter_rows(min_col=col_idx, max_col=col_idx):
                     for cell in row:
                         cell.number_format = '0'
-        messagebox.showinfo("Success", f"Processed file saved to {full_save_path}")
+        df.to_csv(csv_save_path, index=False)
+        messagebox.showinfo("Success", f"Processed Excel file saved to {excel_save_path}. \n\nProcessed CSV file saved to {csv_save_path}.")
         root.destroy()
     except Exception as e:
-        messagebox.showerror("Error", f"An unexpected error occured: {e}")
+        messagebox.showerror("Error", f"An unexpected error occured: \n{e}")
 
 if __name__ == "__main__":
     root = tk.Tk()
     root.title("Loading...")
 
-    loading_popup(root, [load_file, delete_junk_cols, reorder_cols, rename_and_add_cols, reorder_all_cols, fill_easy_cells, make_children])
+    loading_popup(root, [load_file, delete_junk_cols, reorder_cols, rename_and_add_cols, reorder_all_cols, fill_easy_cells, get_images, resize_covers, make_children])
 
     root.withdraw()
 
