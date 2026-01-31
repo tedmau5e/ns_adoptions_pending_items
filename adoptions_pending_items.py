@@ -11,6 +11,7 @@ from PIL import Image
 import shutil
 import xml.etree.ElementTree as ET
 from pathlib import Path
+import numpy as np
 
 load_dotenv(dotenv_path="./ISBNdb_API_Key.env")
 api_key = os.getenv("API_KEY")
@@ -148,7 +149,7 @@ def rename_and_add_cols(df):
     print(current_cols)
     df1.rename(columns={'Item Display Name': 'DISPLAYNAME', 'ISBN' : 'ISBN', 'UPC Code' : 'UPC', 'Long Title' : 'LONG_TITLE', 'Short Title' : 'SHORT_TITLE', 'Book Author' : 'AUTHOR', 'Book Publisher' : 'IMPRINT'}, inplace=True) # renames existing columns inplace
     df1['DISPLAYNAME'] = df1['DISPLAYNAME'].fillna(df1['LONG_TITLE']) # assigns 'DISPLAYNAME' field contents to match 'LONG_TITLE'
-    new_columns = {'EXTERNAL_ID' : '', 'ITEM_NAME_NUMBER' : '', 'MATRIX_TYPE' : 'Parent Matrix Item', 'CS_PRODUCT_TYPE' : '', 'PARENT' : '', 'UNIT_TYPE' : 'Each', 'STOCK_UNIT' : 'EA', 'PURCHASE_UNIT' : 'EA', 'SALE_UNIT' : 'EA', 'DO_NOT_ALLOW_DISCOUNT' : 'T', 'SUBSIDIARY' : 'Brown University Bookstore', 'INCLUDE_CHILDREN' : 'T', 'DEPARTMENT' : 'Textbooks : TX Textbook (TXT)', 'PRODUCT_CATEGORY' : 'Course Materials Physical (CMP) : Print New', 'RENTAL_AVAILABLE' : '', 'BOOK_CONDITION' : '', 'EDITION' : 'NA', 'WEB_DISP_BEHAVIOR' : 'ATP based add and remove from web display', 'COSTING_METHOD' : 'Average', 'PREFERRED_LOCATION' : 'Main Campus Bookstore', 'COGS_ACCOUNT' : '219', 'INCOME_ACCOUNT' : '324', 'ASSET_ACCOUNT' : '218', 'TAX_SCHEDULE' : 'Taxable RI', 'Webstore Image Name': ''} # defines new columns and default values
+    new_columns = {'EXTERNAL_ID' : '', 'ITEM_NAME_NUMBER' : '', 'MATRIX_TYPE' : 'Parent Matrix Item', 'CS_PRODUCT_TYPE' : '', 'PARENT' : '', 'UNIT_TYPE' : 'Each', 'STOCK_UNIT' : 'EA', 'PURCHASE_UNIT' : 'EA', 'SALE_UNIT' : 'EA', 'DO_NOT_ALLOW_DISCOUNT' : 'T', 'SUBSIDIARY' : 'Brown University Bookstore', 'INCLUDE_CHILDREN' : 'T', 'DEPARTMENT' : 'Textbooks : TX Textbook (TXT)', 'PRODUCT_CATEGORY' : 'Course Materials Physical (CMP) : Print New', 'RENTAL_AVAILABLE' : '', 'BOOK_CONDITION' : '', 'EDITION' : 'NA', 'WEB_DISP_BEHAVIOR' : 'ATP based add and remove from web display', 'COSTING_METHOD' : 'Average', 'PREFERRED_LOCATION' : 'Main Campus Bookstore', 'COGS_ACCOUNT' : '219', 'INCOME_ACCOUNT' : '324', 'ASSET_ACCOUNT' : '218', 'TAX_SCHEDULE' : 'Taxable RI', 'Base Price' : '', 'Webstore Image Name': ''} # defines new columns and default values
     for index in range(first_row_idx, last_row_idx): # loop to go through every row (index) with data in dataframe
         for col, val in new_columns.items():
             df2.loc[index, col] = val # loop to assign val to cells for each column per row (index)
@@ -160,7 +161,7 @@ def reorder_all_cols(df):
     # function to settle final column order
     current_cols = df.columns.tolist()
     print(current_cols)
-    final_col_order = ['EXTERNAL_ID', 'ITEM_NAME_NUMBER', 'DISPLAYNAME', 'MATRIX_TYPE', 'CS_PRODUCT_TYPE', 'PARENT', 'ISBN', 'UPC', 'UNIT_TYPE', 'STOCK_UNIT', 'PURCHASE_UNIT', 'SALE_UNIT', 'DO_NOT_ALLOW_DISCOUNT', 'SUBSIDIARY', 'INCLUDE_CHILDREN', 'DEPARTMENT', 'PRODUCT_CATEGORY', 'RENTAL_AVAILABLE', 'BOOK_CONDITION', 'LONG_TITLE', 'SHORT_TITLE', 'AUTHOR', 'EDITION', 'IMPRINT', 'WEB_DISP_BEHAVIOR', 'COSTING_METHOD', 'PREFERRED_LOCATION', 'COGS_ACCOUNT', 'INCOME_ACCOUNT', 'ASSET_ACCOUNT', 'TAX_SCHEDULE', 'Webstore Image Name']
+    final_col_order = ['EXTERNAL_ID', 'ITEM_NAME_NUMBER', 'DISPLAYNAME', 'MATRIX_TYPE', 'CS_PRODUCT_TYPE', 'PARENT', 'ISBN', 'UPC', 'UNIT_TYPE', 'STOCK_UNIT', 'PURCHASE_UNIT', 'SALE_UNIT', 'DO_NOT_ALLOW_DISCOUNT', 'SUBSIDIARY', 'INCLUDE_CHILDREN', 'DEPARTMENT', 'PRODUCT_CATEGORY', 'RENTAL_AVAILABLE', 'BOOK_CONDITION', 'LONG_TITLE', 'SHORT_TITLE', 'AUTHOR', 'EDITION', 'IMPRINT', 'Base Price', 'WEB_DISP_BEHAVIOR', 'COSTING_METHOD', 'PREFERRED_LOCATION', 'COGS_ACCOUNT', 'INCOME_ACCOUNT', 'ASSET_ACCOUNT', 'TAX_SCHEDULE', 'Webstore Image Name']
     return df[final_col_order]
 
 def fill_easy_cells(df): # function to fill cells with pre-existing data
@@ -195,6 +196,7 @@ def label_dupes(row): # function to label duplicates as 'New' or 'Used' children
         row['RENTAL_AVAILABLE'] = 'F'
         row['BOOK_CONDITION'] = 'Used'
         row['TAX_SCHEDULE'] = 'Not Taxable'
+        row['Base Price'] = round(row['Base Price'] * 0.75, 2)
         row['Webstore Image Name'] = ''
     return row
 
@@ -231,15 +233,20 @@ def get_images(isbn): # function to call ISBNdb and retrieve book images
         print(headers)
         response.raise_for_status() # return status code if call unsuccessful
         book_data = response.json() # assign response to book_data object
-        if 'image_original' in book_data['book']: # check if 'image_original' exists in json response's 'book' object
+        if 'image_original' in book_data['book'] and 'msrp' in book_data['book']: # check if 'image_original' exists in json response's 'book' object
+            new_msrp = book_data['book']['msrp']
             image = book_data['book']['image_original'] # assign 'image_original' to image object
             image_link = req.get(image, stream=True) # store image url from image object
             image_link.raise_for_status() # return status code if call unsuccessful
             with open(images_save_path, 'wb') as file: # loop to save image binary data into chunks at images_save_path
                 for chunk in image_link.iter_content(chunk_size=8192):
                     file.write(chunk)
+            return new_msrp
+        elif 'msrp' not in book_data['book']:
+            messagebox.showerror('Error', f'No MSRP available for {isbn}. Leaving blank.')
+            new_msrp = 0
         elif 'image' not in book_data['image_original']:
-            messagebox.showerror('Error', f'No image found for {isbn}.') # display message if no image found
+            messagebox.showerror('Error', f'No image found for {isbn}.') # display message if no image found     
     except HTTPError as e:
         print(f"HTTP Error occurred: {e}")
         print(f"Status code: {e.response.status_code}")
@@ -332,14 +339,16 @@ def change_books(load_file, delete_junk_cols, reorder_cols, rename_and_add_cols,
         
         fill_easy_cells(df)
         print(df)
-        
-        for index, row in df.iterrows(): # loop to iterate through rows to retrieve ISBN and call ISBNdb API for images
-            isbn = row['ISBN']
-            get_images(isbn)
+
+        df['Base Price'] = df['ISBN'].apply(get_images) # get book images and MSRP based on ISBN column
         
         resize_covers(dl_folder_home, resized_images, (600, 600))
 
         df = make_children(df)
+        # identify parent item rows and delete value in Base Price for each parent item
+        parent_rows = df['MATRIX_TYPE'] == 'Parent Matrix Item'
+        df.loc[parent_rows, 'Base Price'] = np.nan
+        
         print(df)
 
         try: # attempt to delete original downloaded image folder, keeping resized images
