@@ -601,7 +601,10 @@ def change_books(
         archive_format = "zip"
         root_dir = resized_images
         shutil.make_archive(archive_name, archive_format, root_dir)
-        messagebox.showinfo("Compressed", "Image folder compressed for upload.")
+        messagebox.showinfo(
+            "Compressed",
+            f"Image folder compressed for upload and saved to {dl_folder_home}.",
+        )
 
         # ask user to select save location for Excel and CSV output
         save_directory = filedialog.askdirectory(
