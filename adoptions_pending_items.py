@@ -3,6 +3,7 @@ from tkinter import filedialog, messagebox, ttk
 import pandas as pd
 from datetime import datetime
 import os
+import sys
 import threading
 from dotenv import load_dotenv
 import requests as req
@@ -14,7 +15,19 @@ from pathlib import Path
 import numpy as np
 import time
 
-load_dotenv(dotenv_path="./ISBNdb_API_Key.env")
+
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+
+dotenv_path = resource_path("ISBNdb_API_Key.env")
+
+# load_dotenv(dotenv_path="./ISBNdb_API_Key.env")
+load_dotenv(dotenv_path=dotenv_path)
 api_key = os.getenv("API_KEY")
 print(api_key)
 
