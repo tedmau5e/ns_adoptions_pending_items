@@ -14,20 +14,21 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 import numpy as np
 import time
+import unicodedata
 
 
-def resource_path(relative_path):
-    try:
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(".")
-    return os.path.join(base_path, relative_path)
+# def resource_path(relative_path):
+#     try:
+#         base_path = sys._MEIPASS
+#     except Exception:
+#         base_path = os.path.abspath(".")
+#     return os.path.join(base_path, relative_path)
 
 
-dotenv_path = resource_path("ISBNdb_API_Key.env")
+# dotenv_path = resource_path("ISBNdb_API_Key.env")
 
-# load_dotenv(dotenv_path="./ISBNdb_API_Key.env")
-load_dotenv(dotenv_path=dotenv_path)
+load_dotenv(dotenv_path="./ISBNdb_API_Key.env")
+# load_dotenv(dotenv_path=dotenv_path)
 api_key = os.getenv("API_KEY")
 print(api_key)
 
@@ -180,16 +181,17 @@ def parse_xml_data_to_df(file_path):  # function to parse .xml data to .xlsx dat
 
 
 def delete_junk_cols(df):
-    # function to delete unneeded columns
-    df.drop(columns=cols_to_delete, inplace=True)
-    df.columns = [
-        "ISBN",
-        "UPC Code",
-        "Item Display Name",
-        "Short Title",
-        "Long Title",
-        "Book Author",
-        "Book Publisher",
+    # function to delete unneeded columns/keep required original columns
+    df = df[
+        [
+            "ISBN",
+            "UPC Code",
+            "Item Display Name",
+            "Short Title",
+            "Long Title",
+            "Book Author",
+            "Book Publisher",
+        ]
     ]
     print(f"Columns {cols_to_delete} deleted.")
     return df
@@ -393,6 +395,16 @@ def make_children(
     return df_duplicated
 
 
+def strip_accents(text):
+    nfd_form = unicodedata.normalize(
+        "NFD", text
+    )  # Normalize string to decomposed form (NFD) where accents are separate characters
+    ascii_form = "".join(
+        c for c in nfd_form if unicodedata.category(c) != "Mn"
+    )  # Filter out non-spacing characters (Mn category, includes accents)
+    return str(ascii_form)
+
+
 def get_images(isbn):  # function to call ISBNdb and retrieve book images
     base_url = f"https://api2.isbndb.com/book/"
     headers = {"accept": "application/json", "Authorization": api_key}
@@ -550,6 +562,7 @@ def change_books(
     delete_junk_cols,
     reorder_cols,
     rename_and_add_cols,
+    # strip_accents,
     reorder_all_cols,
     fill_easy_cells,
     get_images,
@@ -571,6 +584,7 @@ def change_books(
             return
 
         df = rename_and_add_cols(df)
+        # df = df.apply(strip_accents)
 
         df = reorder_all_cols(df)
 
@@ -653,6 +667,7 @@ if __name__ == "__main__":
             get_images,
             resize_covers,
             make_children,
+            # strip_accents,
         ],
     )
 
