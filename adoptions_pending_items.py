@@ -16,7 +16,6 @@ import numpy as np
 import time
 import unicodedata
 
-
 # def resource_path(relative_path):
 #     try:
 #         base_path = sys._MEIPASS
@@ -175,7 +174,8 @@ def parse_xml_data_to_df(file_path):  # function to parse .xml data to .xlsx dat
 
     df = pd.DataFrame(data, columns=columns, index=None)
     excel_file_name = Path(file_path).stem + ".xlsx"
-    df.to_excel(excel_file_name, index=False)
+    excel_save_location = os.path.join(desktop_path, excel_file_name)
+    df.to_excel(excel_save_location, index=False)
     print(df)
     return df
 
@@ -472,13 +472,15 @@ def get_images(isbn):  # function to call ISBNdb and retrieve book images
 def resize_covers(
     input_folder, output_folder, canvas_size
 ):  # function to resize book images to meet NS standards, filling white background if smaller than required dimensions
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
+    output_dir = Path(desktop_path) / output_folder
+
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
     for filename in os.listdir(input_folder):
         if filename.lower().endswith((".jpg", ".jpeg")):
             input_path = os.path.join(input_folder, filename)
-            output_path = os.path.join(output_folder, filename)
+            output_path = os.path.join(output_dir, filename)
 
             try:
                 img = Image.open(input_path).convert(
@@ -602,23 +604,20 @@ def change_books(
         parent_rows = df["MATRIX_TYPE"] == "Parent Matrix Item"
         df.loc[parent_rows, "Base Price"] = np.nan
 
-        print(df)
+        # define compressed folder name and format, then create archive folder of images
+        archive_name = os.path.join(desktop_path, f"{resized_images}-compressed")
+        archive_format = "zip"
+        shutil.make_archive(archive_name, archive_format)
+        messagebox.showinfo(
+            "Compressed",
+            f"Image folder compressed for upload and saved to {dl_folder_home}.",
+        )
 
         try:  # attempt to delete original downloaded image folder, keeping resized images
             shutil.rmtree(dl_folder_home)
             print(f"\nSuccessfully deleted original image folder {dl_folder_home}.")
         except OSError as e:
             print(f"\nError deleting folder: {dl_folder_home}: \n{e}")
-
-        # define compressed folder name and format, then create archive folder of images
-        archive_name = f"{resized_images}-compressed"
-        archive_format = "zip"
-        root_dir = resized_images
-        shutil.make_archive(archive_name, archive_format, root_dir)
-        messagebox.showinfo(
-            "Compressed",
-            f"Image folder compressed for upload and saved to {dl_folder_home}.",
-        )
 
         # ask user to select save location for Excel and CSV output
         save_directory = filedialog.askdirectory(
