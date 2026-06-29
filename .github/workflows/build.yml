@@ -10,7 +10,6 @@ jobs:
         steps:
             - name: Check .env source exits
               run: |
-                  ls -la
                   test -f ISBNdb_API_Key.env && echo "ISBNdb_API_Key.env present" || (echo "ISBNdb_API_Key.env missing" && exit 1)
             - name: Checkout
               uses: actions/checkout@v1
