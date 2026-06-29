@@ -16,6 +16,16 @@ jobs:
                 cat > API_Key.env <<'EOF'
                 API_KEY=${{ secrets.API_KEY }}
                 EOF
+            - name: Check .env source exists
+              shell: bash
+              run: |
+                  ls -la
+                  if [ -f API_Key.env]; then
+                      echo "API_Key.env present"
+                  else
+                      echo "API_Key.env missing"
+                      exit 1
+                  fi
             - name: Install Python
               uses: actions/setup-python@v4
               with:
