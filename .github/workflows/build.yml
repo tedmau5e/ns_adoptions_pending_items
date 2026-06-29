@@ -16,9 +16,6 @@ jobs:
                 cat > API_Key.env <<'EOF'
                 API_KEY=${{ secrets.API_KEY }}
                 EOF
-            - name: Check .env source exits
-              run: |
-                  test -f ISBNdb_API_Key.env && echo "ISBNdb_API_Key.env present" || (echo "ISBNdb_API_Key.env missing" && exit 1)
             - name: Install Python
               uses: actions/setup-python@v4
               with:
