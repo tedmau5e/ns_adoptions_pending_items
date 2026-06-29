@@ -16,18 +16,18 @@ import numpy as np
 import time
 import unicodedata
 
-# def resource_path(relative_path):
-#     try:
-#         base_path = sys._MEIPASS
-#     except Exception:
-#         base_path = os.path.abspath(".")
-#     return os.path.join(base_path, relative_path)
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 
 
-# dotenv_path = resource_path("ISBNdb_API_Key.env")
+dotenv_path = resource_path("ISBNdb_API_Key.env")
 
-load_dotenv(dotenv_path="./ISBNdb_API_Key.env")
-# load_dotenv(dotenv_path=dotenv_path)
+# load_dotenv(dotenv_path="./ISBNdb_API_Key.env")
+load_dotenv(dotenv_path=dotenv_path)
 api_key = os.getenv("API_KEY")
 print(api_key)
 
