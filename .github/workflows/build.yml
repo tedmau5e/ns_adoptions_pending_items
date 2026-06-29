@@ -44,7 +44,7 @@ jobs:
                 path: dist/adoptions_pending_items.exe
             - name: Run built app to validate dotenv_path
               run: |
-                .dist/adoptions_pending_items || true
+                .dist/adoptions_pending_items.exe || true
             
             - name: create release
               id: create_release
