@@ -10,11 +10,12 @@ jobs:
         steps:
             - name: Checkout
               uses: actions/checkout@v1
-            - name: Create ISBNdb_API_Key.env
-              run: |
-                  cat > ISBNdb_API_Key.env <<'EOF'
-                  API_KEY=${{ secrets.API_KEY }}
-                  EOF
+            - name: Create API_Key.env
+  shell: bash
+  run: |
+    cat > API_Key.env <<'EOF'
+    API_KEY=${{ secrets.API_KEY }}
+    EOF
             - name: Check .env source exits
               run: |
                   test -f ISBNdb_API_Key.env && echo "ISBNdb_API_Key.env present" || (echo "ISBNdb_API_Key.env missing" && exit 1)
