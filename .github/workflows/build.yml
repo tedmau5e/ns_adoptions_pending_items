@@ -13,17 +13,17 @@ jobs:
             - name: Create API_Key.env
               shell: bash
               run: |
-                cat > API_Key.env <<'EOF'
+                cat > ISBNdb_API_Key.env <<'EOF'
                 API_KEY=${{ secrets.API_KEY }}
                 EOF
             - name: Check .env source exists
               shell: bash
               run: |
                   ls -la
-                  if [ -f API_Key.env]; then
-                      echo "API_Key.env present"
+                  if [ -f ISBNdb_API_Key.env]; then
+                      echo "ISBNdb_API_Key.env present"
                   else
-                      echo "API_Key.env missing"
+                      echo "ISBNdb_API_Key.env missing"
                       exit 1
                   fi
             - name: Install Python
