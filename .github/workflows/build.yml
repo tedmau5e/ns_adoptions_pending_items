@@ -10,22 +10,16 @@ jobs:
         steps:
             - name: Checkout
               uses: actions/checkout@v1
-            - name: Create API_Key.env
-              shell: bash
+            - name: Create ISBNdb_API_Key.env
+              shell: pwsh
               run: |
-                cat > ISBNdb_API_Key.env <<'EOF'
-                API_KEY=${{ secrets.API_KEY }}
-                EOF
+                "API_KEY=${{ secrets.API_KEY }}" | Out-File -FilePath ISBNdb_API_Key.env -Encoding ascii
             - name: Check .env source exists
-              shell: bash
+              shell: pwsh
               run: |
-                  ls -la
-                  if [ -f ISBNdb_API_Key.env]; then
-                      echo "ISBNdb_API_Key.env present"
-                  else
-                      echo "ISBNdb_API_Key.env missing"
-                      exit 1
-                  fi
+                ls -la
+                if (Test-Path "ISBNdb_API_Key.env") { Write-Output "ISBNdb_API_Key.env present" }
+                else { Write-Output "ISBNdb_API_Key.env missing"; exit 1 }
             - name: Install Python
               uses: actions/setup-python@v4
               with:
@@ -51,7 +45,7 @@ jobs:
                 path: dist/adoptions_pending_items.exe
             - name: Run built app to validate dotenv_path
               run: |
-                  .dist/adoptions_pending_items || true
+                .dist/adoptions_pending_items || true
             
             - name: create release
               id: create_release

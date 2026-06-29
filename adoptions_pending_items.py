@@ -28,7 +28,7 @@ dotenv_path = resource_path("ISBNdb_API_Key.env")
 
 # load_dotenv(dotenv_path="./ISBNdb_API_Key.env")
 print("dotenv_path:", dotenv_path)
-print("exists:", os.path.exists(dotenv_path)
+print("exists:", os.path.exists(dotenv_path))
 load_dotenv(dotenv_path=dotenv_path)
 api_key = os.getenv("API_KEY")
 print(api_key)
