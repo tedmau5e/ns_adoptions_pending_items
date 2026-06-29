@@ -17,7 +17,6 @@ jobs:
             - name: Check .env source exists
               shell: pwsh
               run: |
-                ls -la
                 if (Test-Path "ISBNdb_API_Key.env") { Write-Output "ISBNdb_API_Key.env present" }
                 else { Write-Output "ISBNdb_API_Key.env missing"; exit 1 }
             - name: Install Python
