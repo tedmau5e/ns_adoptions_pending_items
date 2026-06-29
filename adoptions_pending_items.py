@@ -361,7 +361,10 @@ def label_dupes(row):  # function to label duplicates as 'New' or 'Used' childre
         row["RENTAL_AVAILABLE"] = "F"
         row["BOOK_CONDITION"] = "Used"
         row["TAX_SCHEDULE"] = "Not Taxable"
-        row["Base Price"] = round(row["Base Price"] * 0.75, 2)
+        try:
+            row["Base Price"] = round(row["Base Price"] * 0.75, 2)
+        except:
+            row["Base Price"] = ""
         row["Webstore Image Name"] = ""
     return row
 
